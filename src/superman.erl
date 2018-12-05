@@ -45,7 +45,7 @@ reconfigure_supervisor(SupName, Specs) ->
 
     {Deleted, New, Changed, _Unchanged} = extract_children(SupName, Specs),
     reconfigure_supervisor_ll(SupName, Deleted, New, Changed, 0).
-    
+
 start_children(Module, Config) ->
     start_children(Module, Module, Config).
 
@@ -76,7 +76,7 @@ reconfigure_supervisor_tree(SupName, Specs) ->
 %%%======================================================
 
 get_supervisor_state(SupPid) ->
-    {status, _Pid, {module, _Mod}, 
+    {status, _Pid, {module, _Mod},
      [_PDict, _SysState, _Parent, _Dbg, Misc]} = sys:get_status(SupPid),
     %% loop through all data keys in the misc status
     case lists:filtermap(fun(Data) ->
@@ -86,7 +86,21 @@ get_supervisor_state(SupPid) ->
                                  end
                          end, proplists:get_all_values(data, Misc)) of
         [] -> undefined;
-        [State] -> State
+        [State] ->
+            case State of
+                %% new format of supervisor child state? (E21)
+                {state, A, B, ChildStates, C, D, E, F, G, H, I} ->
+                    case ChildStates of
+                        %% reformat the new state into the old states to keep corman supervisor states in sync between versions
+                        {ChildKeys, M} when is_list(ChildKeys) andalso is_map(M) ->
+                            {state, A, B, [ maps:get(ChildKey, M) || ChildKey <- ChildKeys ], C, D, E, F, G, H, I};
+                        _ ->
+                            State
+                    end;
+                %% probably old format
+                _ ->
+                    State
+            end
     end.
 
 reconfigure_supervisor_ll(SupName, Deleted, New, Changed, N) ->
@@ -293,6 +307,6 @@ change_specs(Specs) ->
     lists:map(fun change_spec/1, Specs).
 
 change_spec({Id, MFA, _RestartType, Timeout, Type, Modules}) ->
-    {Id, MFA, some_type, Timeout, Type, Modules}. 
-    
+    {Id, MFA, some_type, Timeout, Type, Modules}.
+
 -endif.
